@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { env } from "./config/env";
 import { drizzle } from "drizzle-orm/bun-sql";
 
-const db = drizzle(process.env["DATABASE_URL"]!);
+const db = drizzle(env.DATABASE_URL);
