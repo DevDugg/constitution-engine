@@ -1,513 +1,218 @@
-# BUILD_PLAN.md
 
-**Goal:** Ship a backend-only, memory-anchored, policy-driven AI governance MVP in **14 days** using **Bun + Express + TypeScript + PostgreSQL (+pgvector) + n8n + Vercel AI SDK**, deployable on **Railway**. Each task is atomic, includes exact commands, file paths, and verifications—no fluff.
+# BUILD_PLAN.md — GPT‑GOV (AI‑Native Business OS) — 14‑Day Crash Build
 
-**Assumptions**
+> Goal: Stand up a production‑minded MVP of a memory‑anchored, policy‑driven AI governance backend in **14 days**, then harden it with guardrails, observability, and learning loops. No code is written here — you’ll fill the functions and schemas yourself. *Hidden clues* are embedded as HTML comments (`<!-- clue: ... -->`).
 
-- Repo: `gpt-gov` (rename if you want).
-- OS: Unix-like shell available.
-- You have a PostgreSQL instance (Railway or local) and an OpenAI API key.
-- You’ll wire n8n (self-hosted or Cloud) to call your service webhooks.
+**Core sources**: Architecture, memory layers, APIs, and jobs are defined in the repo README; treat this plan as the executable checklists to ship the spec.
 
 ---
 
-## Stack & Prereqs
+## Guiding Principles
 
-- **Runtime:** Bun 1.x
-- **Server:** Express 5 + TypeScript
-- **DB:** Postgres 15+ with `pgvector`
-- **ORM:** Drizzle ORM (TS-first). (Swap for Prisma if you prefer.)
-- **AI:** Vercel AI SDK (`ai`) + `@ai-sdk/openai` for embeddings/LLM
-- **Jobs:** n8n (webhooks + scheduled crons)
-- **Deploy:** Railway
-- **Logs:** pino
-- **Validation:** zod
+- **Deterministic first**, LLM‑assist second.  
+- **Everything is an event** → decisions → outcomes → learning loop.  
+- **Versioned policies** with **Autonomy Levels (AL0–AL3)** and **hash‑chained decisions**.  
+- **Daily snapshots** and **bandit‑driven variants** (promotion via Slack proposal).  
+- **Small, testable surfaces** — every day ends with smoke checks.
+
+<!-- clue: Keep “LLM call timeout ≤ 1500ms” budget; cache policies/snapshots for speed. -->
 
 ---
 
-# 14-Day Build Plan
+## Tools You’ll Use (no code here, only actions)
 
-> All commands run from repo root. Replace placeholders (`USER`, `PASS`, `HOST`, `DB`) in connection strings.
-
----
-
-## Day 1 — Project Bootstrap (Bun + TS + Express)
-
-**Actions**
-
-1. Init project
-
-```bash
-mkdir gpt-gov && cd gpt-gov
-bun init -y
-```
-
-2. TypeScript config
-
-```bash
-bun add -d typescript @types/node tsx
-bun x tsc --init --rootDir src --outDir dist --esModuleInterop --resolveJsonModule --moduleResolution node --skipLibCheck true
-```
-
-3. Install runtime deps
-
-```bash
-bun add express pino zod dotenv
-```
-
-4. Scaffold directories & env
-
-```bash
-mkdir -p src/{routes,core,config,db,jobs}
-printf 'PORT=3000\n' > .env.example && cp .env.example .env
-```
-
-5. Create files
-
-- `src/config/env.ts` — load env, validate required vars (throw if missing).
-- `src/server.ts` — Express app with JSON parser, `/health` route returning `{ ok: true }`.
-
-6. Run dev
-
-```bash
-bun run --hot src/server.ts
-curl -s localhost:3000/health
-```
+- Runtime: **Bun 1.x**, **Express + TypeScript**, **Drizzle ORM**, **PostgreSQL 15+** with **pgvector**.  
+- AI: **Vercel AI SDK** with OpenAI provider.  
+- Jobs: **n8n** (HTTP triggers + scheduled).  
+- Deploy: **Railway**.  
+- Validation & Logs: **zod**, **pino**.  
 
 ---
 
-## Day 2 — PostgreSQL + Drizzle + pgvector
+## Skill Gaps — What to Learn Fast
 
-**Actions**
+1. **Drizzle ORM + migrations**: schema → migration → rollback; seeding patterns.  
+2. **pgvector basics**: embedding dims, `vector(1536)`, cosine distance; simple ANN index.  
+3. **Policy design**: autonomy bands; escalation; versioning semantics.  
+4. **Hash chains**: `prev_hash → hash` to make decisions tamper‑evident.  
+5. **Bandits** (Thompson Sampling): mapping successes from `outcomes` to `(alpha, beta)`.  
+6. **n8n** flows**: webhook triggers, scheduled runs, secrets handling.  
+7. **Observability**: p50/p95 lat, token usage, AL distribution; JSON logging; correlation IDs.  
+8. **Security**: job token headers, least‑privilege service tokens, PII redaction in logs.  
 
-1. Install DB tooling
-
-```bash
-bun add drizzle-orm pg pgpool pgvector
-bun add -d drizzle-kit
-```
-
-2. Set DB URL
-
-```bash
-echo 'DATABASE_URL=postgres://USER:PASS@HOST:5432/DB' >> .env
-```
-
-3. Drizzle config
-
-```bash
-cat > drizzle.config.ts << 'EOF'
-export default {
-  schema: "./src/db/schema.ts",
-  out: "./drizzle",
-  dialect: "postgresql",
-  dbCredentials: { url: process.env.DATABASE_URL! }
-} as const;
-EOF
-```
-
-4. Create files
-
-- `src/db/index.ts` — pg `Pool` + Drizzle instance, export `db`.
-- `src/db/schema.ts` — define tables:
-  - `events(id uuid pk, type text, ts timestamptz, actor text, correlation_id uuid, payload jsonb)`
-  - `decisions(id uuid pk, node text, policy_version text, inputs jsonb, output jsonb, autonomy_level int, requires_human bool, human_approver uuid, latency_ms int, ts timestamptz, context_vec vector(1536))`
-  - `outcomes(decision_id uuid pk refs decisions, recorded_at timestamptz, metrics jsonb)`
-  - `policy_versions(id serial pk, name text, version text, doc jsonb, created_at timestamptz)`
-  - `entity_features(entity_type text, entity_id text, as_of_date date, features jsonb, pk(entity_type,entity_id,as_of_date))`
-  - `knowledge_snapshots(id serial pk, scope text, period_start date, period_end date, summary text, summary_vec vector(1536), created_at timestamptz)`
-
-5. Enable pgvector
-
-```bash
-psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
-```
-
-6. Generate & push schema
-
-```bash
-bun x drizzle-kit generate
-bun x drizzle-kit push
-```
+<!-- clue: You can prototype bandits with a tiny Beta sampler; store only (alpha,beta) per variant. -->
 
 ---
 
-## Day 3 — Append-only Events API
+## Deliverables Overview
 
-**Actions**
-
-1. Create route
-
-- `src/routes/events.ts` — POST `/events` accepts `{type, actor, correlationId?, payload}` (zod-validate), inserts into `events`, returns inserted row.
-
-2. Wire routes
-
-- Import/use router in `src/server.ts` at `/events`.
-
-3. Verify
-
-```bash
-curl -X POST localhost:3000/events \
-  -H 'content-type: application/json' \
-  -d '{"type":"DiscountRequested","actor":"sales-node","payload":{"deal_id":"D1","deal_value":10000}}'
-```
+- **Day 3**: Local server responding to `/health`; Postgres + pgvector running; migrations applied.  
+- **Day 6**: `/events`, `/decisions/finance`, `/outcomes/:decisionId` round‑trip works locally.  
+- **Day 9**: n8n ingest + daily jobs calling internal job endpoints.  
+- **Day 12**: Policy variants routed; outcomes update variant stats; Slack proposal message.  
+- **Day 14**: Deployed on Railway; dashboards show metrics; kill‑switch + idempotency in place.
 
 ---
 
-## Day 4 — Policy Engine v1 (Deterministic)
+## Daily Plan (14 Days)
 
-**Actions**
+### Day 1 — Repo Skeleton & Env
 
-1. Policy types/loader
+- [ ] Initialize Bun + TS project structure exactly like `src/` layout (config, routes, core, jobs).  
+- [ ] Create `.env` from example with placeholders only (no secrets in repo).  
+- [ ] Write **README excerpts** to a DEVLOG entry summarizing subsystem responsibilities.  
+- [ ] Add **pino** logger with correlation ID middleware (generate UUID per request).  
+- [ ] Add `/health` and `/metrics` route shells (return hardcoded JSON for now).  
+- [ ] Set up **drizzle.config.ts**; connect to local Postgres URL.  
+- **Exit check**: `bun run --hot src/server.ts` → `GET /health` returns `{ ok: true }`.
+<!-- clue: Use a request header like x-cid to override correlation ID for replays. -->
 
-- `src/core/policy/types.ts` — define finance autonomy bands structure.
-- `src/core/policy/loader.ts` — fetch latest row from `policy_versions` by `name`.
+### Day 2 — Database Foundations
 
-2. Seed initial policy
+- [ ] Provision local **Postgres 15**; enable extension `CREATE EXTENSION vector;`.  
+- [ ] Define Drizzle models for: `events`, `decisions`, `outcomes`, `policy_versions`, `entity_features`, `knowledge_snapshots`, `policy_variants_stats`.  
+- [ ] Add **indexes** listed in the spec.  
+- [ ] Generate + push migrations; verify tables exist.  
+- **Exit check**: Run a migration rollback → re‑apply. Confirm no drift.  
+<!-- clue: Keep `context_vec vector(1536)` for the same embedding dim you’ll use. -->
 
-```bash
-psql "$DATABASE_URL" -c "INSERT INTO policy_versions(name,version,doc) VALUES ('finance-constitution','1.0.0','{\"nodes\":{\"finance\":{\"authorities\":[{\"action\":\"approve_discount\",\"autonomy_bands\":[{\"level\":1,\"max_discount_pct\":0.05,\"min_margin_pct\":0.25},{\"level\":2,\"max_discount_pct\":0.12,\"min_margin_pct\":0.23},{\"level\":3,\"max_discount_pct\":0.15,\"min_margin_pct\":0.22}],\"escalation\":{\"if_outside\":\"CFO\"}}]}}}');"
-```
+### Day 3 — Policy Loader & Evaluator Scaffolds
 
-3. Evaluator
+- [ ] Create `core/policy/types.ts` to model autonomy bands and escalation.  
+- [ ] Implement `policy/loader.ts` to fetch **latest by name** or by `name@version`.  
+- [ ] Stub `policy/evaluator.ts` with deterministic guardrail checks only (no LLM).  
+- [ ] Seed one policy in `policy_versions` (finance v1.0.0) via migration or seed script.  
+- **Exit check**: Unit tests for evaluator boundaries (approve/deny at edges).  
+<!-- clue: Represent bands as predicates over inputs; evaluator returns AL and reason. -->
 
-- `src/core/policy/evaluator.ts` — pure function: inputs → compare against bands → return `{approved, discount_pct, autonomy_level, reason}`.
+### Day 4 — Events API & Context Assembler (Skeleton)
 
----
+- [ ] Implement `POST /events` to insert immutable events with optional `correlationId`.  
+- [ ] Create `core/memory/assembler.ts` interface returning: latest snapshots + k‑NN similar cases.  
+- [ ] Stub `memory/similar.ts` to return empty for now; wire vector column in `decisions`.  
+- **Exit check**: cURL insert for `DiscountRequested` returns row ID; list events by type.  
+<!-- clue: Always index events by `(type, ts)` for quick recent scans. -->
 
-## Day 5 — Decisions API (Finance)
+### Day 5 — Decisions API (Deterministic)
 
-**Actions**
+- [ ] Create `POST /decisions/finance` handler: load policy → assemble context (stub) → evaluate deterministically → store decision row.  
+- [ ] Implement **hash chain**: fetch previous decision hash, compute current.  
+- [ ] Record **latency_ms** (monotonic timer) and **autonomy_level**.  
+- **Exit check**: Round‑trip decision stored with `policy_version` and `hash` fields.  
+<!-- clue: Hash input as stable JSON (sorted keys) + prev_hash + policy_version. -->
 
-1. Create route
+### Day 6 — Outcomes API + Rewards Mapping
 
-- `src/routes/decisions.ts` — POST `/decisions/finance` with `{deal_value, base_margin_pct, requested_discount_pct, customer_tier}`.
-  - Load policy (loader).
-  - Evaluate (evaluator).
-  - Insert into `decisions` with `policy_version`, `autonomy_level`, `requires_human`, `latency_ms` (measure wall time).
-  - Return inserted row.
+- [ ] Implement `POST /outcomes/:decisionId` to upsert outcome metrics.  
+- [ ] Create `learning/reward.ts` mapping outcomes → success/failure for bandits.  
+- [ ] Add smoke cURLs for events→decision→outcome trip.  
+- **Exit check**: Posting an outcome updates the decision’s learning counters in memory.  
+<!-- clue: Consider success = won && margin ≥ band min_margin. -->
 
-2. Wire route
+### Day 7 — Embeddings, Indexer & Similar Cases
 
-- `src/server.ts` → `app.use("/decisions", decisionsRouter)`
+- [ ] Implement `memory/embeddings.ts` wrapper (Vercel AI SDK) to create vectors for decisions + snapshots.  
+- [ ] Backfill `context_vec` for last N decisions (script).  
+- [ ] Implement `memory/similar.ts`: simple cosine similarity query (LIMIT 10).  
+- **Exit check**: Decisions API attaches top‑k similar case IDs in response (for debug only).  
+<!-- clue: Use a normalized vector; store as `vector(1536)`; add IVF or HNSW later. -->
 
-3. Verify
+### Day 8 — Knowledge Snapshots & Features
 
-```bash
-curl -X POST localhost:3000/decisions/finance \
-  -H 'content-type: application/json' \
-  -d '{"deal_value":12000,"base_margin_pct":0.31,"requested_discount_pct":0.08,"customer_tier":"A"}'
-```
+- [ ] Create `jobs/aggregator.ts` to compute daily `entity_features` (SQL first).  
+- [ ] Create `jobs/distill.ts` to produce `knowledge_snapshots` + embeddings.  
+- [ ] Add `/jobs/*/run` routes guarded by `x-internal-token`.  
+- **Exit check**: Manual POSTs run jobs and populate both tables.  
+<!-- clue: Keep snapshot length under model context; store `summary_vec` for recall. -->
 
----
+### Day 9 — n8n Flows (Ingest + Daily Jobs)
 
-## Day 6 — Outcomes & n8n Ingest
+- [ ] Build **Ingestor** flow: HTTP trigger → normalize → POST `/events`.  
+- [ ] Schedule **06:00** Aggregator, **06:10** Distill calls; use job token secret.  
+- [ ] Export flows into `flows/ingest.json`.  
+- **Exit check**: n8n executions show 2 successful daily runs.  
+<!-- clue: Use environment variables in n8n; never hardcode base URLs or tokens. -->
 
-**Actions**
+### Day 10 — Variant Router & Bandit Stats
 
-1. Outcomes route
+- [ ] Implement `learning/bandit.ts` (variant selection strategy + update rules).  
+- [ ] Extend Decisions API to attach **variant** (e.g., `finance-constitution@1.1.B`).  
+- [ ] Create `policy_variants_stats` updater on each outcome.  
+- **Exit check**: Two variants receive traffic; stats `(alpha,beta)` mutate as outcomes arrive.  
+<!-- clue: Thompson Sampling = sample θ~Beta(α,β) per variant; pick argmax. -->
 
-- `src/routes/outcomes.ts` — POST `/outcomes/:decisionId` upsert `{ metrics: json }` into `outcomes`.
+### Day 11 — Slack Adapter & Promotion Proposals
 
-2. n8n: Ingest flow
+- [ ] Implement `adapters/slack.ts` with `notify(channel, text)` and health check.  
+- [ ] Add `jobs/scorecards.ts` to compute variant deltas and propose promotions.  
+- [ ] Post to Slack when candidate > baseline with minimum samples + margin.  
+- **Exit check**: A Slack message renders a human‑readable promotion summary.  
+<!-- clue: Include links to replay endpoints for human verification. -->
 
-- HTTP Trigger → Function (normalize payload) → HTTP Request to `POST /events`.
-- Store n8n flow as `flows/ingest.json` in repo.
+### Day 12 — Guardrails, Idempotency & Kill Switches
 
-3. Verify
+- [ ] Add `Idempotency-Key` support to mutating routes.  
+- [ ] Introduce `node_flags` (feature gate per node/action) and a global kill switch.  
+- [ ] Enforce **zod** validation on inputs/outputs for adapters and routes.  
+- **Exit check**: Simulate a double‑post and a kill‑switch flip; observe safe behavior.  
+<!-- clue: Keep a deny‑by‑default policy on actions unless explicitly enabled. -->
 
-```bash
-curl -X POST localhost:3000/outcomes/<DECISION_ID> \
-  -H 'content-type: application/json' \
-  -d '{"metrics":{"won":true,"margin":0.24,"time_to_close_days":3}}'
-```
+### Day 13 — Metrics, Dashboards & Tracing Hooks
 
----
+- [ ] Flesh out `/metrics`: p50/p95 latency, error counts by route, token usage, AL distribution.  
+- [ ] Add basic OpenTelemetry hooks (optional) and structured error fields.  
+- [ ] Create a simple dashboard (even JSON file rendered) to visualize trends.  
+- **Exit check**: Metrics reflect traffic; latency budget respected; token spikes visible.  
+<!-- clue: Emit tokens used per request as a counter for budget alerts. -->
 
-## Day 7 — Embeddings & Vector Search (context_vec)
+### Day 14 — Railway Deployment & Production Checklist
 
-**Actions**
-
-1. Install AI SDK
-
-```bash
-bun add ai @ai-sdk/openai
-echo 'OPENAI_API_KEY=sk-...' >> .env
-```
-
-2. Embedding util
-
-- `src/core/memory/embeddings.ts` — function to embed text via Vercel AI SDK (`text-embedding-3-small`), return `number[]`.
-
-3. Decision indexer
-
-- `src/core/memory/indexer.ts` — after inserting a decision: stringify `{inputs,output}` → embed → update `decisions.context_vec` with vector.
-
-4. Similarity search helper
-
-- `src/core/memory/similar.ts` — given current input, embed; SQL query: `ORDER BY context_vec <-> $1 LIMIT 3`.
-
-5. Verify:
-
-- Create 3–5 decisions with varied inputs; run similarity on a new request; ensure results are sensible.
-
----
-
-## Day 8 — Context Assembler
-
-**Actions**
-
-1. Build assembler
-
-- `src/core/memory/assembler.ts` — for node “finance”:
-  - Load latest `knowledge_snapshots` for scope `finance-daily` (if any).
-  - Compute `similar` via vector search (top-3).
-  - Load current policy + version.
-  - Return `{ policy, policyVersion, snapshot, similar }`.
-
-2. Integrate
-
-- In `/decisions/finance`, call assembler before evaluation; (evaluator may ignore for now, but store `inputs.context_used` in DB for audit).
-
-3. Verify
-
-- Log ms spent fetching snapshot + similar + policy; keep under 150ms locally.
-
----
-
-## Day 9 — Daily Aggregator (Entity Features)
-
-**Actions**
-
-1. Aggregation SQL
-
-- `src/jobs/aggregator.sql` — compute daily tiles: success rate, avg latency, avg margin (join `decisions`+`outcomes`).
-
-2. Runner
-
-- `src/jobs/aggregator.ts` — execute SQL; upsert into `entity_features` with `as_of_date = yesterday`.
-
-3. Job endpoint
-
-- `src/routes/jobs.ts` — POST `/jobs/aggregator/run` (protected by an internal token header).
-
-4. n8n cron
-
-- 06:00 daily → HTTP Request to `/jobs/aggregator/run`.
-
-5. Verify
-
-```bash
-curl -X POST localhost:3000/jobs/aggregator/run -H 'x-internal-token: YOUR_TOKEN'
-psql "$DATABASE_URL" -c 'select * from entity_features order by as_of_date desc limit 5;'
-```
+- [ ] Deploy API to Railway; attach Postgres plugin; set all ENV vars.  
+- [ ] Provision n8n (Railway or n8n Cloud) and point cron webhooks to Railway URLs.  
+- [ ] Run smoke tests against public URL; confirm Slack messages deliver.  
+- [ ] Enable backups + retention windows; verify least‑privilege tokens.  
+- **Exit check**: ✅ “MVP Ready” — demo events→decisions→outcomes; daily jobs running; Slack proposals live.
 
 ---
 
-## Day 10 — Daily Distill (Knowledge Snapshots)
+## Mastery Accelerators (Do Once)
 
-**Actions**
+- **Replay tool**: CLI to re‑evaluate last N decisions with latest policy (diff reasons/AL).  
+- **Shadow mode**: run a candidate policy in parallel (no‑action) and compare outcomes.  
+- **Drift alarms**: alert when decision distributions or AL levels shift unexpectedly.  
+- **Redaction layer**: centralize PII scrubbing before logs/snapshots.  
 
-1. Distill job
-
-- `src/jobs/distill.ts` — query yesterday’s finance decisions → craft summary prompt (bullets) → `ai.generateText` → insert `knowledge_snapshots(scope='finance-daily', period_start, period_end, summary)` + store `summary_vec`.
-
-2. Endpoint + cron
-
-- POST `/jobs/distill/run` (protected) and n8n cron at 06:10.
-
-3. Verify
-
-```bash
-curl -X POST localhost:3000/jobs/distill/run -H 'x-internal-token: YOUR_TOKEN'
-psql "$DATABASE_URL" -c 'select scope, period_start, period_end, left(summary,120) from knowledge_snapshots order by created_at desc limit 3;'
-```
+<!-- clue: Replays should fix correlation ID to compare evaluator deterministically. -->
 
 ---
 
-## Day 11 — Policy Variants + Router (Bandit A/B)
+## Test Scripts (No Implementation Code)
 
-**Actions**
+Use cURL (fill placeholders yourself):
 
-1. Insert variant
+- Event → `POST /events`  
+- Decision → `POST /decisions/finance`  
+- Outcome → `POST /outcomes/:decisionId`  
 
-```bash
-psql "$DATABASE_URL" -c "INSERT INTO policy_versions(name,version,doc) VALUES ('finance-constitution','1.1.B','{\"nodes\":{\"finance\":{\"authorities\":[{\"action\":\"approve_discount\",\"autonomy_bands\":[{\"level\":1,\"max_discount_pct\":0.05,\"min_margin_pct\":0.25},{\"level\":2,\"max_discount_pct\":0.10,\"min_margin_pct\":0.23},{\"level\":3,\"max_discount_pct\":0.15,\"min_margin_pct\":0.22}],\"escalation\":{\"if_outside\":\"CFO\"}}]}}}');"
-```
-
-2. Router
-
-- `src/core/learning/bandit.ts` — Thompson Sampling (persisted tomorrow).
-- Wrap `/decisions/finance` to choose between versions (A=1.0.0, B=1.1.B) and record chosen `policy_version`.
-
-3. Verify
-
-- Fire 100 requests; observe ~50/50 split initially.
+<!-- clue: Keep a Postman collection with three folders: Events, Decisions, Outcomes. -->
 
 ---
 
-## Day 12 — Outcomes → Rewards → Learn
+## Definition of Done (MVP)
 
-**Actions**
-
-1. Persistence for variants
-
-- Create table `policy_variants_stats(variant text pk, alpha int, beta int, updated_at timestamptz)`.
-
-2. Reward mapping
-
-- `src/core/learning/reward.ts` — reward = `1` if `won == true && margin >= min_margin`, else `0`.
-
-3. Update on outcome
-
-- In `/outcomes/:decisionId`, look up decision’s `policy_version`; compute reward; update that variant’s `alpha/beta`.
-
-4. Verify
-
-- Post synthetic outcomes favoring B; query `policy_variants_stats` and ensure B’s `alpha` grows.
+- Decisions are **reproducible** (policy version + hash chain).  
+- Memory is **layered** (events, decisions, features, snapshots).  
+- Learn loop **updates** bandit stats; Slack proposal **notifies** humans.  
+- **SLOs** respected (p50 < 300ms, p95 < 800ms excluding adapters).  
+- **Security**: job token, kill switch, least privilege, backups configured.
 
 ---
 
-## Day 13 — Slack Adapter + Scorecards & Proposals
+## Stretch After Day 14
 
-**Actions**
+- **ANN indexes** for vectors; **cached** snapshot windows.  
+- **Adapter gallery** (Stripe invoices, Github issues triage).  
+- **HR node** (`POST /decisions/hr`) with distinct policies & outcomes.  
+- **Policy authoring UI** (admin‑only) with YAML→JSON validation.
 
-1. Slack client
-
-```bash
-bun add @slack/web-api
-echo 'SLACK_BOT_TOKEN=xoxb-...' >> .env
-```
-
-2. Adapter
-
-- `src/core/adapters/slack.ts` — `notify(channel: string, text: string)` using Slack Web API.
-
-3. Scorecards
-
-- `src/jobs/scorecards.ts` — join `decisions+outcomes` (yesterday), compute win rates per variant; if candidate beats baseline by threshold and `n >= min`, call Slack with a **promotion proposal** (include numbers).
-
-4. Endpoint + cron
-
-- POST `/jobs/scorecards/run` (protected) + n8n cron 06:20.
-
-5. Verify
-
-```bash
-curl -X POST localhost:3000/jobs/scorecards/run -H 'x-internal-token: YOUR_TOKEN'
-# Check Slack channel for message
-```
-
----
-
-## Day 14 — Hardening + Metrics + Deploy
-
-**Actions**
-
-1. Kill switches
-
-- Create table `node_flags(node text pk, action text, enabled bool)`; check before evaluating `/decisions/finance`.
-
-2. Tamper-evident chain
-
-- Add columns `prev_hash text, hash text` to `decisions`; on insert, compute `hash = sha256(prev_hash || node || policy_version || inputs || output || ts)` (use crypto lib).
-
-3. Policy publish
-
-- POST `/policies/finance/publish` — accepts YAML/JSON, validates structure, inserts `policy_versions`.
-
-4. Metrics
-
-- GET `/metrics` — JSON with p50/p95 decision latency, error count, token usage, autonomy distribution.
-
-5. Deploy to Railway
-
-- Create new project → Postgres add-on → set `DATABASE_URL` + env keys.
-- Build & start commands: `bun install && bun run --hot src/server.ts` (for dev) or transpile then `node dist/server.js`.
-- Wire n8n cron webhooks to Railway URL.
-
-6. E2E script
-
-```bash
-# 1) Create several discounts/decisions
-for i in {1..10}; do
-  curl -s -X POST "$RAILWAY_URL/decisions/finance" -H 'content-type: application/json' \
-    -d '{"deal_value":10000,"base_margin_pct":0.30,"requested_discount_pct":0.08,"customer_tier":"A"}' >/dev/null
-done
-
-# 2) Post outcomes (simulate wins/losses)
-# replace <DECISION_ID> with real IDs or write a tiny script to fetch & loop
-# 3) Trigger daily jobs
-curl -X POST "$RAILWAY_URL/jobs/aggregator/run" -H 'x-internal-token: YOUR_TOKEN'
-curl -X POST "$RAILWAY_URL/jobs/distill/run" -H 'x-internal-token: YOUR_TOKEN'
-curl -X POST "$RAILWAY_URL/jobs/scorecards/run" -H 'x-internal-token: YOUR_TOKEN'
-```
-
----
-
-## ENV Checklist
-
-```
-PORT=3000
-DATABASE_URL=postgres://USER:PASS@HOST:5432/DB
-OPENAI_API_KEY=sk-...
-SLACK_BOT_TOKEN=xoxb-...
-INTERNAL_JOB_TOKEN=...
-NODE_ENV=production
-```
-
----
-
-## Quick Verifications
-
-- Create Event
-
-```bash
-curl -XPOST localhost:3000/events -H 'content-type: application/json' \
- -d '{"type":"DiscountRequested","actor":"sales-node","payload":{"deal_id":"D1","deal_value":10000,"base_margin_pct":0.3,"requested_discount_pct":0.08}}'
-```
-
-- Get Decision
-
-```bash
-curl -XPOST localhost:3000/decisions/finance -H 'content-type: application/json' \
- -d '{"deal_value":10000,"base_margin_pct":0.30,"requested_discount_pct":0.08,"customer_tier":"A"}'
-```
-
-- Post Outcome
-
-```bash
-curl -XPOST localhost:3000/outcomes/<DECISION_ID> -H 'content-type: application/json' \
- -d '{"metrics":{"won":true,"margin":0.24,"time_to_close_days":2}}'
-```
-
-- Trigger Jobs
-
-```bash
-curl -XPOST localhost:3000/jobs/aggregator/run -H 'x-internal-token: YOUR_TOKEN'
-curl -XPOST localhost:3000/jobs/distill/run -H 'x-internal-token: YOUR_TOKEN'
-curl -XPOST localhost:3000/jobs/scorecards/run -H 'x-internal-token: YOUR_TOKEN'
-```
-
-- Health/Metrics
-
-```bash
-curl -s localhost:3000/health
-curl -s localhost:3000/metrics | jq
-```
-
----
-
-## Needle-Mover Micro-Tasks (drop-in any day)
-
-- **LRU cache policy**: Cache `loadFinancePolicy()`; measure cold vs warm latency.
-- **Timeouts**: Wrap all LLM calls in `AbortController` @ 1500ms; log timeouts separately.
-- **Idempotency**: Support `Idempotency-Key` on POST routes; store seen keys for 24h.
-- **Replay**: `/decisions/replay?limit=50` — re-evaluate decisions against current policy; log diffs.
-- **Shadow Mode**: Add `shadow=true` variant; evaluate but don’t act; compare outcomes for 24h.
-- **Drift detection**: Daily check of requested vs approved discount by tier; Slack alert if delta > X%.
-- **Escalation queue**: Table `escalations`; POST `/escalations/:id/approve`; write audit line.
-
----
-
-**You now have a precise, 14-day execution map.** Build it line-by-line; when done, you’ll own a working, self-improving decision system with memory, metrics, and governance primitives—deployed and demoable.
+<!-- clue: Keep policies as data; keep evaluators tiny and pure. -->
