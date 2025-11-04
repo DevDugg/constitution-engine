@@ -4,7 +4,11 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "bun run --hot src/server.ts",
+    "migrate:generate": "bun x drizzle-kit generate",
+    "migrate:push": "bun x drizzle-kit push",
+    "up": "docker-compose up",
+    "down": "docker-compose down",
+    "dev": "bun run up && bun run migrate:push && bun run --hot src/server.ts",
     "build": "bun build src/server.ts --outdir dist --target bun"
   },
   "keywords": [],
