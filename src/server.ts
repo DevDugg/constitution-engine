@@ -4,6 +4,8 @@ import { env } from "./config/env";
 import { pinoHttp } from "pino-http";
 import { generateRequestId } from "./lib/generate-request-id";
 import { metricsRouter } from "./routes/metrics";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { db } from "./db";
 
 const logger = pinoHttp({
   level: "info",
@@ -17,6 +19,8 @@ const logger = pinoHttp({
     return generateRequestId(req as Request);
   },
 });
+
+await migrate(db, { migrationsFolder: "./drizzle" });
 
 const app = express();
 
