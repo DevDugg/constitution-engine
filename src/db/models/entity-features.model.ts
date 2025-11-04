@@ -19,9 +19,6 @@ export const entityFeatures = pgTable(
     primaryKey({
       columns: [table.entityType, table.entityId, table.asOfDate],
     }),
+    index("entity_features_as_of_date_idx").on(table.asOfDate),
   ]
 );
-
-export const entityFeaturesAsOfDateIndex = index(
-  "entity_features_as_of_date_idx"
-).on(entityFeatures.asOfDate);

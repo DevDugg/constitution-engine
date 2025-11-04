@@ -9,29 +9,27 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 
-export const decisions = pgTable("decisions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  ts: timestamp("ts", { withTimezone: true }).defaultNow().notNull(),
-  node: text("node").notNull(),
-  policyVersion: text("policy_version").notNull(),
-  inputs: jsonb("inputs").notNull(),
-  output: jsonb("output").notNull(),
-  autonomyLevel: integer("autonomy_level").notNull(),
-  hash: text("hash").notNull(),
-  correlationId: uuid("correlation_id").notNull(),
-  prevHash: text("prev_hash"),
-  contextVec: vector("context_vec", {
-    dimensions: 1536,
-  }),
-  latencyMs: integer("latency_ms"),
-  humanApprover: uuid("human_approver"),
-});
-
-export const decisionsNodeTsIndex = index("decisions_node_ts_idx").on(
-  decisions.node,
-  decisions.ts
+export const decisions = pgTable(
+  "decisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ts: timestamp("ts", { withTimezone: true }).defaultNow().notNull(),
+    node: text("node").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    inputs: jsonb("inputs").notNull(),
+    output: jsonb("output").notNull(),
+    autonomyLevel: integer("autonomy_level").notNull(),
+    hash: text("hash").notNull(),
+    correlationId: uuid("correlation_id").notNull(),
+    prevHash: text("prev_hash"),
+    contextVec: vector("context_vec", {
+      dimensions: 1536,
+    }),
+    latencyMs: integer("latency_ms"),
+    humanApprover: uuid("human_approver"),
+  },
+  (table) => [
+    index("decisions_node_ts_idx").on(table.node, table.ts),
+    index("decisions_policy_version_idx").on(table.policyVersion),
+  ]
 );
-
-export const decisionsPolicyVersionIndex = index(
-  "decisions_policy_version_idx"
-).on(decisions.policyVersion);
