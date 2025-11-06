@@ -11,7 +11,7 @@ interface Node {
 
 interface Authority {
   action: string;
-  autonomy_bands: AutonomyBand[];
+  autonomyBands: AutonomyBand[];
   escalation?: Escalation;
 }
 
@@ -21,9 +21,9 @@ interface AutonomyBand {
 }
 
 interface Escalation {
-  if_outside: string;
+  ifOutside: string;
   notify?: string[];
-  timeout_hours?: number;
+  timeoutHours?: number;
 }
 
 interface EvaluatorInput {
@@ -33,10 +33,10 @@ interface EvaluatorInput {
 
 interface EvaluatorResult {
   approved: boolean;
-  autonomy_level: AutonomyLevel;
+  autonomyLevel: AutonomyLevel;
   reason: string;
-  matched_band?: AutonomyBand;
-  escalation_target?: string;
+  matchedBand?: AutonomyBand;
+  escalationTarget?: string;
 }
 
 export type {
