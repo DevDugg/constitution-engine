@@ -57,30 +57,30 @@
 
 ### Day 1 — Repo Skeleton & Env
 
-- [ ] Initialize Bun + TS project structure exactly like `src/` layout (config, routes, core, jobs).
-- [ ] Create `.env` from example with placeholders only (no secrets in repo).
-- [ ] Write **README excerpts** to a DEVLOG entry summarizing subsystem responsibilities.
-- [ ] Add **pino** logger with correlation ID middleware (generate UUID per request).
-- [ ] Add `/health` and `/metrics` route shells (return hardcoded JSON for now).
-- [ ] Set up **drizzle.config.ts**; connect to local Postgres URL.
+- [x] Initialize Bun + TS project structure exactly like `src/` layout (config, routes, core, jobs).
+- [x] Create `.env` from example with placeholders only (no secrets in repo).
+- [x] Write **README excerpts** to a DEVLOG entry summarizing subsystem responsibilities.
+- [x] Add **pino** logger with correlation ID middleware (generate UUID per request).
+- [x] Add `/health` and `/metrics` route shells (return hardcoded JSON for now).
+- [x] Set up **drizzle.config.ts**; connect to local Postgres URL.
 - **Exit check**: `bun run --hot src/server.ts` → `GET /health` returns `{ ok: true }`.
 <!-- clue: Use a request header like x-cid to override correlation ID for replays. -->
 
 ### Day 2 — Database Foundations
 
-- [ ] Provision local **Postgres 15**; enable extension `CREATE EXTENSION vector;`.
-- [ ] Define Drizzle models for: `events`, `decisions`, `outcomes`, `policy_versions`, `entity_features`, `knowledge_snapshots`, `policy_variants_stats`.
-- [ ] Add **indexes** listed in the spec.
-- [ ] Generate + push migrations; verify tables exist.
+- [x] Provision local **Postgres 15**; enable extension `CREATE EXTENSION vector;`.
+- [x] Define Drizzle models for: `events`, `decisions`, `outcomes`, `policy_versions`, `entity_features`, `knowledge_snapshots`, `policy_variants_stats`.
+- [x] Add **indexes** listed in the spec.
+- [x] Generate + push migrations; verify tables exist.
 - **Exit check**: Run a migration rollback → re‑apply. Confirm no drift.
 <!-- clue: Keep `context_vec vector(1536)` for the same embedding dim you’ll use. -->
 
 ### Day 3 — Policy Loader & Evaluator Scaffolds
 
-- [ ] Create `core/policy/types.ts` to model autonomy bands and escalation.
-- [ ] Implement `policy/loader.ts` to fetch **latest by name** or by `name@version`.
-- [ ] Stub `policy/evaluator.ts` with deterministic guardrail checks only (no LLM).
-- [ ] Seed one policy in `policy_versions` (finance v1.0.0) via migration or seed script.
+- [x] Create `core/policy/types.ts` to model autonomy bands and escalation.
+- [x] Implement `policy/loader.ts` to fetch **latest by name** or by `name@version`.
+- [x] Stub `policy/evaluator.ts` with deterministic guardrail checks only (no LLM).
+- [x] Seed one policy in `policy_versions` (finance v1.0.0) via migration or seed script.
 - **Exit check**: Unit tests for evaluator boundaries (approve/deny at edges).
 <!-- clue: Represent bands as predicates over inputs; evaluator returns AL and reason. -->
 
