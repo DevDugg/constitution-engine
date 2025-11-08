@@ -7,6 +7,7 @@ import {
   serial,
   text,
 } from "drizzle-orm/pg-core";
+import type { PolicyDocument } from "../../core/policy/types";
 
 export const policyVersions = pgTable(
   "policy_versions",
@@ -14,7 +15,7 @@ export const policyVersions = pgTable(
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     version: text("version").notNull(),
-    doc: jsonb("doc").notNull(),
+    doc: jsonb("doc").$type<PolicyDocument>().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
