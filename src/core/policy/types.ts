@@ -5,6 +5,14 @@ interface PolicyDocument {
   nodes: Record<string, Node>;
 }
 
+interface PolicyVersionRow {
+  id: number;
+  name: string;
+  version: string;
+  doc: PolicyDocument;
+  createdAt: Date;
+}
+
 interface Node {
   authorities: Authority[];
 }
@@ -47,4 +55,5 @@ export type {
   Escalation,
   EvaluatorInput,
   EvaluatorResult,
+  PolicyVersionRow,
 };
