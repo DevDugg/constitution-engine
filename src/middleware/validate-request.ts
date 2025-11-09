@@ -58,9 +58,9 @@ type ValidatedRequest<
   ReqBody = any,
   ReqQuery = {}
 > = Request<P, ResBody, ReqBody, ReqQuery> & {
-  validated?: {
+  validated: {
     params?: P;
-    body?: ReqBody;
+    body: ReqBody;
     query?: ReqQuery;
   };
 };
