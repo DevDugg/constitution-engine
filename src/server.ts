@@ -6,6 +6,7 @@ import { generateRequestId } from "./lib/generate-request-id";
 import { metricsRouter } from "./routes/metrics";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "./db";
+import { errorHandler } from "./middleware/error-handler";
 
 const logger = pinoHttp({
   level: "info",
@@ -30,6 +31,9 @@ app.use(express.json());
 // routes
 app.use(healthRouter);
 app.use(metricsRouter);
+
+// error handler
+app.use(errorHandler);
 
 app.listen(env.PORT, () => {
   console.log(`Server is running on port ${env.PORT}`);
