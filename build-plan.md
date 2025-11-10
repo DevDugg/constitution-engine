@@ -86,9 +86,9 @@
 
 ### Day 4 — Events API & Context Assembler (Skeleton)
 
-- [ ] Implement `POST /events` to insert immutable events with optional `correlationId`.
-- [ ] Create `core/memory/assembler.ts` interface returning: latest snapshots + k‑NN similar cases.
-- [ ] Stub `memory/similar.ts` to return empty for now; wire vector column in `decisions`.
+- [x] Implement `POST /events` to insert immutable events with optional `correlationId`.
+- [x] Create `core/memory/assembler.ts` interface returning: latest snapshots + k‑NN similar cases.
+- [x] Stub `memory/similar.ts` to return empty for now; wire vector column in `decisions`.
 - **Exit check**: cURL insert for `DiscountRequested` returns row ID; list events by type.
 <!-- clue: Always index events by `(type, ts)` for quick recent scans. -->
 
