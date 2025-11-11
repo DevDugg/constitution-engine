@@ -7,6 +7,7 @@ import { metricsRouter } from "./routes/metrics";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "./db";
 import { errorHandler } from "./middleware/error-handler";
+import { decisionsRouter } from "./core/decisions/decisions";
 
 const logger = pinoHttp({
   level: "info",
@@ -31,6 +32,7 @@ app.use(express.json());
 // routes
 app.use(healthRouter);
 app.use(metricsRouter);
+app.use(decisionsRouter);
 
 // error handler
 app.use(errorHandler);
