@@ -144,15 +144,6 @@ const makeDecision = async (
 
 router.post(
   "/decisions/:node",
-  (req, res, next) => {
-    console.log("=== DEBUG ===");
-    console.log("URL:", req.url);
-    console.log("Path:", req.path);
-    console.log("Route path:", req.route?.path);
-    console.log("Params:", req.params);
-    console.log("=============");
-    next();
-  },
   validateRequest({ body: createDecisionSchema, params: decisionParamsSchema }),
   asyncHandler(
     async (
