@@ -9,4 +9,21 @@ const createEventSchema = z.object({
 
 type CreateEventDto = z.infer<typeof createEventSchema>;
 
-export { createEventSchema, type CreateEventDto };
+// Decision schemas
+const createDecisionSchema = z.object({
+  action: z.string().min(1, "Action is required"),
+  data: z.record(z.string(), z.any()),
+  correlationId: z.uuid().optional(),
+  policyVersion: z.string().optional(),
+});
+
+type CreateDecisionDto = z.infer<typeof createDecisionSchema>;
+
+const decisionParamsSchema = z.object({
+  node: z.string().min(1, "Node is required"),
+});
+
+type DecisionParamsDto = z.infer<typeof decisionParamsSchema>;
+
+export type { CreateEventDto, CreateDecisionDto, DecisionParamsDto };
+export { createEventSchema, createDecisionSchema, decisionParamsSchema };
