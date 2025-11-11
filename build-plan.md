@@ -94,9 +94,9 @@
 
 ### Day 5 — Decisions API (Deterministic)
 
-- [ ] Create `POST /decisions/finance` handler: load policy → assemble context (stub) → evaluate deterministically → store decision row.
-- [ ] Implement **hash chain**: fetch previous decision hash, compute current.
-- [ ] Record **latency_ms** (monotonic timer) and **autonomy_level**.
+- [x] Create `POST /decisions/finance` handler: load policy → assemble context (stub) → evaluate deterministically → store decision row.
+- [x] Implement **hash chain**: fetch previous decision hash, compute current.
+- [x] Record **latency_ms** (monotonic timer) and **autonomy_level**.
 - **Exit check**: Round‑trip decision stored with `policy_version` and `hash` fields.
 <!-- clue: Hash input as stable JSON (sorted keys) + prev_hash + policy_version. -->
 
