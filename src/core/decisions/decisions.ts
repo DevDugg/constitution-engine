@@ -1,16 +1,5 @@
-import { Router, type Response, type Request } from "express";
-import {
-  validateRequest,
-  type ValidatedRequest,
-} from "../../middleware/validate-request";
-import { asyncHandler } from "../../middleware/async-handler";
-import {
-  createDecisionSchema,
-  decisionParamsSchema,
-  type CreateDecisionDto,
-} from "../../routes/schemas";
+import { type Request } from "express";
 import PolicyLoader from "../policy/loader";
-// import { assemble } from "../memory/assembler";
 import { evaluate } from "../policy/evaluator";
 import { db } from "../../db";
 import { decisions } from "../../db/schema";
@@ -18,8 +7,6 @@ import { desc } from "drizzle-orm";
 import { computeDecisionHash } from "../../lib/hash";
 import { BadRequestError } from "../../errors/bad-request-error";
 import { NotFoundError } from "../../errors/not-found-error";
-
-const router = Router();
 
 interface MakeDecisionOutput {
   id: string;
@@ -142,46 +129,4 @@ const makeDecision = async (
   };
 };
 
-router.post(
-  "/decisions/:node",
-  validateRequest({ body: createDecisionSchema, params: decisionParamsSchema }),
-  asyncHandler(
-    async (
-      req: ValidatedRequest<{ node: string }, any, CreateDecisionDto>,
-      res: Response
-    ) => {
-      const { node: nodeParam } = req.validated.params;
-      const { action, data, correlationId, policyVersion } = req.validated.body;
-
-      const finalCorrelationId = correlationId ?? req.id;
-
-      const decision = await makeDecision({
-        node: nodeParam,
-        action,
-        data,
-        correlationId: finalCorrelationId,
-        policyVersion,
-        req,
-      });
-
-      req.log.info(
-        {
-          decisionId: decision.id,
-          node: nodeParam,
-          action,
-          approved: decision.approved,
-          autonomyLevel: decision.autonomyLevel,
-          latencyMs: decision.latencyMs,
-        },
-        "Decision created"
-      );
-
-      res.status(201).json({
-        success: true,
-        data: decision,
-      });
-    }
-  )
-);
-
-export { router as decisionsRouter };
+export { makeDecision };
