@@ -11,6 +11,7 @@ export const outcomes = pgTable(
       .defaultNow()
       .notNull(),
     metrics: jsonb("metrics").notNull(),
+    correlationId: uuid("correlation_id").notNull(),
   },
   (table) => [index("outcomes_recorded_at_idx").on(table.recordedAt)]
 );

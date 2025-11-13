@@ -25,5 +25,32 @@ const decisionParamsSchema = z.object({
 
 type DecisionParamsDto = z.infer<typeof decisionParamsSchema>;
 
-export type { CreateEventDto, CreateDecisionDto, DecisionParamsDto };
-export { createEventSchema, createDecisionSchema, decisionParamsSchema };
+// Outcome schemas
+
+const createOutcomeSchema = z.object({
+  metrics: z.record(z.string(), z.any()),
+  correlationId: z.uuid().optional(),
+});
+
+type CreateOutcomeDto = z.infer<typeof createOutcomeSchema>;
+
+const outcomeParamsSchema = z.object({
+  decisionId: z.uuid("Invalid decision ID"),
+});
+
+type OutcomeParamsDto = z.infer<typeof outcomeParamsSchema>;
+
+export type {
+  CreateEventDto,
+  CreateDecisionDto,
+  DecisionParamsDto,
+  CreateOutcomeDto,
+  OutcomeParamsDto,
+};
+export {
+  createEventSchema,
+  createDecisionSchema,
+  decisionParamsSchema,
+  outcomeParamsSchema,
+  createOutcomeSchema,
+};
