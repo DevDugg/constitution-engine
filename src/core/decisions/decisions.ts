@@ -88,6 +88,9 @@ const makeDecision = async (
     ...(evaluationResult.escalationTarget && {
       escalationTarget: evaluationResult.escalationTarget,
     }),
+    ...(evaluationResult.matchedBand && {
+      matchedBand: evaluationResult.matchedBand,
+    }),
   };
 
   const hash = computeDecisionHash({
