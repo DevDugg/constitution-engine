@@ -10,10 +10,12 @@ import { db } from "../../db";
 import { decisions, outcomes, policyVersions } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import type { PolicyDocument } from "../../core/policy/types";
+import { randomUUID } from "crypto";
 
 describe("Outcomes API Integration Tests", () => {
   let testDecisionId: string;
   let testPolicyId: number;
+  let testCorrelationId: string;
 
   const testPolicy: PolicyDocument = {
     version: "1.0.0",
@@ -41,6 +43,9 @@ describe("Outcomes API Integration Tests", () => {
   };
 
   beforeAll(async () => {
+    // Generate valid UUID for correlation
+    testCorrelationId = randomUUID();
+
     // Insert test policy
     const [policy] = await db
       .insert(policyVersions)
@@ -74,7 +79,7 @@ describe("Outcomes API Integration Tests", () => {
         autonomyLevel: 2,
         hash: "test-hash-123",
         prevHash: null,
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
         latencyMs: 100,
       })
       .returning();
@@ -101,7 +106,7 @@ describe("Outcomes API Integration Tests", () => {
           margin_pct: 0.25,
           actual_revenue: 10000,
         },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       // Insert outcome
@@ -132,7 +137,7 @@ describe("Outcomes API Integration Tests", () => {
           won: false,
           reason_lost: "competitor_price",
         },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       const [outcome] = await db
@@ -153,7 +158,7 @@ describe("Outcomes API Integration Tests", () => {
           won: true,
           margin_pct: 0.2, // Below min_margin_pct of 0.23
         },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       const [outcome] = await db
@@ -175,7 +180,7 @@ describe("Outcomes API Integration Tests", () => {
           won: true,
           margin_pct: 0.25,
         },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       await db.insert(outcomes).values({
@@ -190,7 +195,7 @@ describe("Outcomes API Integration Tests", () => {
           margin_pct: 0.27,
           actual_revenue: 12000,
         },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       await db
@@ -216,6 +221,8 @@ describe("Outcomes API Integration Tests", () => {
     });
 
     test("handles AL0 (escalated) decision outcome", async () => {
+      const escalatedCorrelationId = randomUUID();
+
       // Create AL0 decision
       const [escalatedDecision] = await db
         .insert(decisions)
@@ -232,7 +239,7 @@ describe("Outcomes API Integration Tests", () => {
           autonomyLevel: 0,
           hash: "escalated-hash",
           prevHash: null,
-          correlationId: "escalated-test",
+          correlationId: escalatedCorrelationId,
           latencyMs: 50,
         })
         .returning();
@@ -243,7 +250,7 @@ describe("Outcomes API Integration Tests", () => {
           margin_pct: 0.3,
           cfo_approved: true,
         },
-        correlationId: "escalated-test",
+        correlationId: escalatedCorrelationId,
       };
 
       const [outcome] = await db
@@ -271,7 +278,7 @@ describe("Outcomes API Integration Tests", () => {
           won: true,
           margin_pct: 0.25,
         },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       await db.insert(outcomes).values({
@@ -300,7 +307,7 @@ describe("Outcomes API Integration Tests", () => {
 
   describe("Correlation ID Tracking", () => {
     test("maintains correlation ID through outcome recording", async () => {
-      const correlationId = "unique-correlation-id";
+      const correlationId = randomUUID();
 
       const outcomeData = {
         metrics: {
@@ -325,12 +332,14 @@ describe("Outcomes API Integration Tests", () => {
         where: eq(decisions.id, testDecisionId),
       });
 
-      expect(decision?.correlationId).toBe("test-correlation-id");
+      expect(decision?.correlationId).toBe(testCorrelationId);
     });
   });
 
   describe("Multiple Outcomes Scenarios", () => {
     test("allows multiple outcomes for different decisions", async () => {
+      const secondCorrelationId = randomUUID();
+
       // Create second decision
       const [decision2] = await db
         .insert(decisions)
@@ -342,19 +351,19 @@ describe("Outcomes API Integration Tests", () => {
           autonomyLevel: 1,
           hash: "hash-2",
           prevHash: "test-hash-123",
-          correlationId: "test-2",
+          correlationId: secondCorrelationId,
           latencyMs: 80,
         })
         .returning();
 
       const outcome1Data = {
         metrics: { won: true, margin_pct: 0.25 },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       const outcome2Data = {
         metrics: { won: false, margin_pct: 0.2 },
-        correlationId: "test-2",
+        correlationId: secondCorrelationId,
       };
 
       await db.insert(outcomes).values([
@@ -397,7 +406,7 @@ describe("Outcomes API Integration Tests", () => {
           },
           array_field: [1, 2, 3],
         },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       const [outcome] = await db
@@ -414,7 +423,7 @@ describe("Outcomes API Integration Tests", () => {
     test("handles empty metrics object", async () => {
       const outcomeData = {
         metrics: {},
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       const [outcome] = await db
@@ -433,7 +442,7 @@ describe("Outcomes API Integration Tests", () => {
     test("records outcome timestamp", async () => {
       const outcomeData = {
         metrics: { won: true },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       };
 
       const [outcome] = await db
@@ -453,7 +462,7 @@ describe("Outcomes API Integration Tests", () => {
       await db.insert(outcomes).values({
         decisionId: testDecisionId,
         metrics: { won: true },
-        correlationId: "test-correlation-id",
+        correlationId: testCorrelationId,
       });
 
       const first = await db.query.outcomes.findFirst({
@@ -469,7 +478,7 @@ describe("Outcomes API Integration Tests", () => {
         .values({
           decisionId: testDecisionId,
           metrics: { won: true, margin_pct: 0.25 },
-          correlationId: "test-correlation-id",
+          correlationId: testCorrelationId,
         })
         .onConflictDoUpdate({
           target: outcomes.decisionId,
