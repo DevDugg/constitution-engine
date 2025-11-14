@@ -10,6 +10,7 @@ import { db } from "./db";
 import { errorHandler } from "./middleware/error-handler";
 import { decisionsRouter } from "./routes/decisions";
 import { outcomesRouter } from "./routes/outcomes";
+import { eventsRouter } from "./routes/events";
 
 // Create base logger for non-request logging
 const baseLogger = pino({
@@ -82,6 +83,7 @@ app.use(express.json());
 // routes
 app.use(healthRouter);
 app.use(metricsRouter);
+app.use(eventsRouter);
 app.use(decisionsRouter);
 app.use(outcomesRouter);
 
