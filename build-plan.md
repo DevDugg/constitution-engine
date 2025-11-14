@@ -102,10 +102,10 @@
 
 ### Day 6 — Outcomes API + Rewards Mapping
 
-- [ ] Implement `POST /outcomes/:decisionId` to upsert outcome metrics.
-- [ ] Create `learning/reward.ts` mapping outcomes → success/failure for bandits.
-- [ ] Add smoke cURLs for events→decision→outcome trip.
-- **Exit check**: Posting an outcome updates the decision’s learning counters in memory.
+- [x] Implement `POST /outcomes/:decisionId` to upsert outcome metrics.
+- [x] Create `learning/reward.ts` mapping outcomes → success/failure for bandits.
+- [x] Add smoke cURLs for events→decision→outcome trip.
+- **Exit check**: Posting an outcome updates the decision's learning counters in memory.
 <!-- clue: Consider success = won && margin ≥ band min_margin. -->
 
 ### Day 7 — Embeddings, Indexer & Similar Cases
